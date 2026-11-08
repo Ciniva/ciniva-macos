@@ -42,6 +42,11 @@ jobs:
           security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
           rm "$RUNNER_TEMP/signing.p12"
           ID=$(security find-identity -p codesigning "$KC" | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1)
+          if [ -n "$DEVELOPER_ID_P12" ] && [ -z "$ID" ]; then
+            echo "::error::DEVELOPER_ID_P12 holds no 'Developer ID Application' identity (certificate plus private key)."
+            security find-identity -p codesigning "$KC" | sed -n 's/.*"\(.*\)".*/  found: \1/p'
+            exit 1
+          fi
           echo "SIGN_IDENTITY=${ID:-Ciniva Code Signing}" >> "$GITHUB_ENV"
       - name: Build
         run: BUNDLE_LIBS=1 ./build.sh
