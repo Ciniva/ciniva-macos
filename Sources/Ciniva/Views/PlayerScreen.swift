@@ -594,6 +594,13 @@ private struct EpisodePanel: View {
         e.files.contains { $0.id == controller.request.fileId }
     }
 
+    private func status(_ e: Episode, current: Bool) -> String {
+        if current { return "Playing now" }
+        guard let f = e.file else { return "Not in library" }
+        let parts: [String?] = [e.runtime.map { "\($0) min" }, f.timeLeftLabel]
+        return parts.compactMap { $0 }.joined(separator: " · ")
+    }
+
     private func row(_ e: Episode) -> some View {
         let f = e.file
         let current = isCurrent(e)
@@ -613,10 +620,7 @@ private struct EpisodePanel: View {
                     }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(e.displayTitle).font(.callout.weight(.semibold)).lineLimit(2)
-                    Text(current ? "Playing now" : f == nil ? "Not in library" : [
-                        e.runtime.map { "\($0) min" },
-                        f.flatMap { file in file.progress.map { _ in "\(Fmt.clock(Double((file.durationMs ?? 0) - (file.positionMs ?? 0)) / 1000)) left" } },
-                    ].compactMap { $0 }.joined(separator: " · "))
+                    Text(status(e, current: current))
                     .font(.caption)
                     .foregroundStyle(current ? accent : .secondary)
                 }

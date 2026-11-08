@@ -167,6 +167,12 @@ public struct MediaFile: Decodable, Identifiable, Hashable, Sendable {
         return Double(p) / Double(d)
     }
 
+    /// "12:34 left" for a partly watched file.
+    public var timeLeftLabel: String? {
+        guard progress != nil else { return nil }
+        return "\(Fmt.clock(Double((durationMs ?? 0) - (positionMs ?? 0)) / 1000)) left"
+    }
+
     public var resumeSeconds: Double {
         guard !isWatched, let p = positionMs else { return 0 }
         return Double(p) / 1000

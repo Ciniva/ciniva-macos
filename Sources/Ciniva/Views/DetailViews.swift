@@ -295,6 +295,13 @@ struct EpisodeRow: View {
     let show: ShowDetail
     let episode: Episode
 
+    private var details: String {
+        let f = episode.file
+        let badges: String = f.map { $0.probe?.techBadges.prefix(2).joined(separator: " ") ?? "" } ?? "Not in library"
+        let parts: [String?] = [episode.airDate, episode.runtime.map { "\($0)m" }, badges, f?.timeLeftLabel]
+        return parts.compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
     var body: some View {
         let f = episode.file
         HStack(alignment: .top, spacing: 16) {
@@ -317,12 +324,7 @@ struct EpisodeRow: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(episode.displayTitle).font(.headline)
-                Text([
-                    episode.airDate,
-                    episode.runtime.map { "\($0)m" },
-                    f.map { $0.probe?.techBadges.prefix(2).joined(separator: " ") ?? "" } ?? "Not in library",
-                    f.flatMap { file in file.progress.map { _ in "\(Fmt.clock(Double((file.durationMs ?? 0) - (file.positionMs ?? 0)) / 1000)) left" } },
-                ].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                Text(details)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 if let o = episode.overview, !o.isEmpty {
