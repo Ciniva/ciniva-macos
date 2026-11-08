@@ -57,8 +57,13 @@ if [[ ${BUNDLE_LIBS:-0} == 1 ]]; then
 fi
 
 IDENTITY=${SIGN_IDENTITY:--}
-if [[ -d "$APP/Contents/Frameworks" ]]; then
-    find "$APP/Contents/Frameworks" -name '*.dylib' -exec codesign --force --sign "$IDENTITY" {} + >/dev/null
+# A Developer ID build needs the hardened runtime and a secure timestamp to pass notarization; LuaJIT in libmpv needs JIT.
+HARDENED=()
+if [[ $IDENTITY == "Developer ID Application:"* ]]; then
+    HARDENED=(--options runtime --timestamp)
 fi
-codesign --force --sign "$IDENTITY" "$APP" >/dev/null
+if [[ -d "$APP/Contents/Frameworks" ]]; then
+    find "$APP/Contents/Frameworks" -name '*.dylib' -exec codesign --force "${HARDENED[@]}" --sign "$IDENTITY" {} + >/dev/null
+fi
+codesign --force "${HARDENED[@]}" --entitlements Resources/Ciniva.entitlements --sign "$IDENTITY" "$APP" >/dev/null
 echo "Built $APP"

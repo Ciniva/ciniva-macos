@@ -10,9 +10,8 @@ library rescan button.
 Download `Ciniva-<version>.zip` from the [latest release](https://github.com/Ciniva/ciniva-macos/releases/latest),
 unzip it and move `Ciniva.app` to Applications. It needs macOS 15 or later on Apple silicon.
 
-The app is signed with Ciniva's own certificate, not an Apple Developer ID, so macOS blocks the first launch. Open it
-once, then go to **System Settings → Privacy & Security** and click **Open Anyway** (or run
-`xattr -dr com.apple.quarantine /Applications/Ciniva.app`).
+Releases are signed with a Developer ID and notarized by Apple, so they open without a Gatekeeper warning. (Releases up
+to 1.1.1 used a self-signed certificate: allow those once in **System Settings → Privacy & Security → Open Anyway**.)
 
 ## Updates
 
@@ -35,5 +34,8 @@ GitHub Actions tests and builds every push. Pushing a commit to `main` that chan
 `v<VERSION>` with the zip and its signature. Repository secrets:
 
 - `UPDATE_SIGNING_KEY`: base64 raw Ed25519 private key; its public half is `Updater.publicKey`.
-- `MACOS_SIGNING_P12`, `MACOS_SIGNING_PASSWORD`: base64 PKCS#12 with the "Ciniva Code Signing" identity. A stable
-  identity keeps keychain access across updates; without it builds are signed ad hoc.
+- `DEVELOPER_ID_P12`, `DEVELOPER_ID_PASSWORD`: base64 PKCS#12 with a "Developer ID Application" identity. Builds are
+  then signed with the hardened runtime and notarized with `NOTARY_KEY_P8` (App Store Connect API key, `.p8` text),
+  `NOTARY_KEY_ID` and `NOTARY_ISSUER_ID`, so Gatekeeper opens them without a warning.
+- `MACOS_SIGNING_P12`, `MACOS_SIGNING_PASSWORD`: fallback self-signed "Ciniva Code Signing" identity, used when no
+  Developer ID is set. Without either, builds are signed ad hoc.

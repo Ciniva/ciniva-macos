@@ -24,9 +24,12 @@ jobs:
           echo "BUILD=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
       - name: Signing identity
         env:
+          DEVELOPER_ID_P12: ${{ secrets.DEVELOPER_ID_P12 }}
+          DEVELOPER_ID_PASSWORD: ${{ secrets.DEVELOPER_ID_PASSWORD }}
           P12: ${{ secrets.MACOS_SIGNING_P12 }}
           P12_PASSWORD: ${{ secrets.MACOS_SIGNING_PASSWORD }}
         run: |
+          if [ -n "$DEVELOPER_ID_P12" ]; then P12=$DEVELOPER_ID_P12; P12_PASSWORD=$DEVELOPER_ID_PASSWORD; fi
           if [ -z "$P12" ]; then echo "No signing identity; signing ad hoc."; exit 0; fi
           KC="$RUNNER_TEMP/signing.keychain-db"
           KP=$(openssl rand -hex 16)
@@ -38,9 +41,24 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KP" "$KC" >/dev/null
           security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
           rm "$RUNNER_TEMP/signing.p12"
-          echo "SIGN_IDENTITY=Ciniva Code Signing" >> "$GITHUB_ENV"
+          ID=$(security find-identity -p codesigning "$KC" | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1)
+          echo "SIGN_IDENTITY=${ID:-Ciniva Code Signing}" >> "$GITHUB_ENV"
       - name: Build
         run: BUNDLE_LIBS=1 ./build.sh
+      - name: Notarize
+        if: startsWith(env.SIGN_IDENTITY, 'Developer ID Application:')
+        env:
+          NOTARY_KEY: ${{ secrets.NOTARY_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          echo "$NOTARY_KEY" > "$RUNNER_TEMP/notary.p8"
+          ditto -c -k --keepParent build/Ciniva.app "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --key "$RUNNER_TEMP/notary.p8" \
+            --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" --wait --timeout 30m
+          rm "$RUNNER_TEMP/notary.p8"
+          xcrun stapler staple build/Ciniva.app
+          spctl --assess --type execute --verbose=2 build/Ciniva.app
       - name: Package
         run: ditto -c -k --keepParent build/Ciniva.app "Ciniva-$VERSION.zip"
       - uses: actions/upload-artifact@v4
