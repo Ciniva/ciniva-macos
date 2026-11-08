@@ -35,7 +35,7 @@ GitHub Actions tests and builds every push. Pushing a commit to `main` that chan
 
 - `UPDATE_SIGNING_KEY`: base64 raw Ed25519 private key; its public half is `Updater.publicKey`.
 - `DEVELOPER_ID_P12`, `DEVELOPER_ID_PASSWORD`: base64 PKCS#12 with a "Developer ID Application" identity. Builds are
-  then signed with the hardened runtime and notarized with `NOTARY_KEY_P8` (App Store Connect API key, `.p8` text),
-  `NOTARY_KEY_ID` and `NOTARY_ISSUER_ID`, so Gatekeeper opens them without a warning.
+  then signed with the hardened runtime and notarized with `NOTARY_APPLE_ID`, `NOTARY_PASSWORD` (an app-specific
+  password) and `NOTARY_TEAM_ID`, so Gatekeeper opens them without a warning. Nothing is submitted to the App Store.
 - `MACOS_SIGNING_P12`, `MACOS_SIGNING_PASSWORD`: fallback self-signed "Ciniva Code Signing" identity, used when no
   Developer ID is set. Without either, builds are signed ad hoc.

@@ -48,15 +48,13 @@ jobs:
       - name: Notarize
         if: startsWith(env.SIGN_IDENTITY, 'Developer ID Application:')
         env:
-          NOTARY_KEY: ${{ secrets.NOTARY_KEY_P8 }}
-          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
-          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+          NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
         run: |
-          echo "$NOTARY_KEY" > "$RUNNER_TEMP/notary.p8"
           ditto -c -k --keepParent build/Ciniva.app "$RUNNER_TEMP/notarize.zip"
-          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --key "$RUNNER_TEMP/notary.p8" \
-            --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" --wait --timeout 30m
-          rm "$RUNNER_TEMP/notary.p8"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$NOTARY_APPLE_ID" \
+            --password "$NOTARY_PASSWORD" --team-id "$NOTARY_TEAM_ID" --wait --timeout 30m
           xcrun stapler staple build/Ciniva.app
           spctl --assess --type execute --verbose=2 build/Ciniva.app
       - name: Package
