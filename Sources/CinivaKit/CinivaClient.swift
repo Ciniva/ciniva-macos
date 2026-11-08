@@ -180,6 +180,10 @@ public struct CinivaClient: Sendable {
         ])
     }
 
+    public func scan() async throws {
+        _ = try await send("POST", "/scan")
+    }
+
     public func setWatched(fileId: Int, _ watched: Bool) async throws {
         _ = try await send("POST", "/files/\(fileId)/watched", body: ["watched": .bool(watched)])
     }

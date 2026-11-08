@@ -66,6 +66,7 @@ final class AppModel {
     var hasStoredSession = false
     var playback: PlaybackRequest?
     var libraryVersion = 0
+    var scanning = false
     var plugins: [PluginInfo] = []
     var toasts: [Toast] = []
     var selection: SidebarItem? = .home
@@ -204,6 +205,23 @@ final class AppModel {
         libraryVersion += 1
     }
 
+    // MARK: Library
+
+    func rescan() async {
+        guard !scanning else { return }
+        do {
+            try await call { try await $0.scan() }
+            scanning = true
+            toast("Scanning the library…")
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(900))
+                self?.scanning = false
+            }
+        } catch {
+            toast("Couldn't start a scan: \(error.localizedDescription)", .error)
+        }
+    }
+
     // MARK: Toasts & events
 
     func toast(_ text: String, _ tone: Tone = .info) {
@@ -229,6 +247,11 @@ final class AppModel {
                             if !text.isEmpty { self.toast(text, data["tone"]?.stringValue == "error" ? .error : .info) }
                         case "library":
                             self.libraryVersion += 1
+                            if self.scanning, data["kind"]?.stringValue == "scan.finished" {
+                                self.scanning = false
+                                let added = Int(data["added"]?.doubleValue ?? 0), removed = Int(data["removed"]?.doubleValue ?? 0)
+                                self.toast("Library scan finished · \(added) added, \(removed) removed")
+                            }
                         default:
                             break
                         }

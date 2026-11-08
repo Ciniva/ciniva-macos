@@ -119,7 +119,12 @@ struct BrowserView: View {
                 }
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: 210)
-            .safeAreaInset(edge: .bottom) { accountMenu }
+            .safeAreaInset(edge: .bottom) {
+                VStack(alignment: .leading, spacing: 0) {
+                    UpdateBanner()
+                    accountMenu
+                }
+            }
         } detail: {
             NavigationStack(path: $model.path) {
                 Group {
@@ -144,6 +149,21 @@ struct BrowserView: View {
             }
         }
         .searchable(text: $query, placement: .toolbar, prompt: "Search movies & shows")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    Task { await model.rescan() }
+                } label: {
+                    if model.scanning {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Label("Rescan Library", systemImage: "arrow.clockwise")
+                    }
+                }
+                .help("Rescan the library for new and removed files")
+                .disabled(model.scanning || model.client == nil)
+            }
+        }
         .toolbar(model.playback == nil ? .automatic : .hidden, for: .windowToolbar)
         .onChange(of: model.selection) { model.path = [] }
         .sheet(item: $model.pluginSheet) { sheet in
@@ -156,6 +176,7 @@ struct BrowserView: View {
             if let host = model.client?.baseURL.host() { Text(host) }
             Divider()
             SettingsLink { Text("Settings…") }
+            Button("Rescan Library") { Task { await model.rescan() } }
             Button("Reload Plugins") { Task { await model.loadPlugins() } }
             Divider()
             Button("Sign Out") { model.signOut() }
@@ -164,5 +185,28 @@ struct BrowserView: View {
         }
         .menuStyle(.borderlessButton)
         .padding(12)
+    }
+}
+
+private struct UpdateBanner: View {
+    @Environment(Updater.self) private var updater
+
+    var body: some View {
+        if let r = updater.available {
+            Button {
+                Task { await updater.install(r) }
+            } label: {
+                Label("Update to \(r.version)", systemImage: "arrow.down.circle.fill")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.borderedProminent)
+            .help("Download Ciniva \(r.version), install it and relaunch")
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+        } else if updater.phase == .installing {
+            HStack { ProgressView().controlSize(.small); Text("Updating…").font(.callout) }
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+        }
     }
 }

@@ -1,0 +1,60 @@
+name: App
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencies
+        run: brew install mpv dylibbundler
+      - name: Test
+        run: swift test
+      - name: Version
+        run: |
+          echo "VERSION=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_ENV"
+          echo "BUILD=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+      - name: Signing identity
+        env:
+          P12: ${{ secrets.MACOS_SIGNING_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_SIGNING_PASSWORD }}
+        run: |
+          if [ -z "$P12" ]; then echo "No signing identity; signing ad hoc."; exit 0; fi
+          KC="$RUNNER_TEMP/signing.keychain-db"
+          KP=$(openssl rand -hex 16)
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          security create-keychain -p "$KP" "$KC"
+          security set-keychain-settings "$KC"
+          security unlock-keychain -p "$KP" "$KC"
+          security import "$RUNNER_TEMP/signing.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign >/dev/null
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KP" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/signing.p12"
+          echo "SIGN_IDENTITY=Ciniva Code Signing" >> "$GITHUB_ENV"
+      - name: Build
+        run: BUNDLE_LIBS=1 ./build.sh
+      - name: Package
+        run: ditto -c -k --keepParent build/Ciniva.app "Ciniva-$VERSION.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ciniva-${{ env.VERSION }}
+          path: Ciniva-${{ env.VERSION }}.zip
+      - name: Release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          if gh release view "v$VERSION" >/dev/null 2>&1; then echo "v$VERSION is already released."; exit 0; fi
+          if [ -z "$UPDATE_SIGNING_KEY" ]; then echo "UPDATE_SIGNING_KEY is not set; not releasing." >&2; exit 1; fi
+          swift scripts/sign-update.swift "Ciniva-$VERSION.zip" > "Ciniva-$VERSION.zip.sig"
+          gh release create "v$VERSION" "Ciniva-$VERSION.zip" "Ciniva-$VERSION.zip.sig" \
+            --title "Ciniva $VERSION" --generate-notes --target "$GITHUB_SHA"

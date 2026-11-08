@@ -31,6 +31,7 @@ enum Prefs {
     static let seekShort = "pref.seekShort"
     static let seekMedium = "pref.seekMedium"
     static let seekLong = "pref.seekLong"
+    static let autoUpdateCheck = "pref.autoUpdateCheck"
 
     static func register() {
         UserDefaults.standard.register(defaults: [
@@ -45,6 +46,7 @@ enum Prefs {
             seekShort: 10,
             seekMedium: 30,
             seekLong: 60,
+            autoUpdateCheck: true,
         ])
     }
 
@@ -59,6 +61,7 @@ struct SettingsView: View {
             PlaybackSettings().tabItem { Label("Playback", systemImage: "play.rectangle") }
             AccountSettings().tabItem { Label("Account", systemImage: "person.crop.circle") }
             PluginSettings().tabItem { Label("Plugins", systemImage: "puzzlepiece.extension") }
+            UpdateSettings().tabItem { Label("Updates", systemImage: "arrow.down.app") }
         }
         .frame(width: 580, height: 680)
     }
@@ -150,6 +153,63 @@ private struct AccountSettings: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+private struct UpdateSettings: View {
+    @Environment(Updater.self) private var updater
+    @AppStorage(Prefs.autoUpdateCheck) private var autoCheck = true
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("Installed version", value: updater.currentVersion)
+                Toggle("Check for updates automatically", isOn: $autoCheck)
+            }
+            Section {
+                UpdateStatus()
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+struct UpdateStatus: View {
+    @Environment(Updater.self) private var updater
+
+    var body: some View {
+        switch updater.phase {
+        case .available(let r):
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Ciniva \(r.version) is available.").font(.headline)
+                if !r.notes.isEmpty {
+                    ScrollView { Text(r.notes).font(.callout).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled) }
+                        .frame(maxHeight: 160)
+                }
+                Button("Install and Relaunch") { Task { await updater.install(r) } }.buttonStyle(.borderedProminent)
+            }
+        case .installing:
+            HStack { ProgressView().controlSize(.small); Text("Downloading and installing…") }
+        case .checking:
+            HStack { ProgressView().controlSize(.small); Text("Checking for updates…") }
+        case .upToDate:
+            HStack {
+                Text("Ciniva is up to date.")
+                Spacer()
+                Button("Check Now") { Task { await updater.check(userInitiated: true) } }
+            }
+        case .failed(let m):
+            HStack {
+                Text(m).foregroundStyle(.red)
+                Spacer()
+                Button("Try Again") { Task { await updater.check(userInitiated: true) } }
+            }
+        case .idle:
+            HStack {
+                Spacer()
+                Button("Check Now") { Task { await updater.check(userInitiated: true) } }
+            }
+        }
     }
 }
 

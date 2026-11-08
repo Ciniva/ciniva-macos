@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct CinivaApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var model = AppModel()
+    @State private var updater = Updater()
 
     init() {
         Prefs.register()
@@ -24,17 +25,27 @@ struct CinivaApp: App {
         Window("Ciniva", id: "main") {
             RootView()
                 .environment(model)
+                .environment(updater)
                 .frame(minWidth: 960, minHeight: 620)
+                .task { updater.startAutomaticChecks() }
         }
         .defaultSize(width: 1280, height: 820)
         .commands {
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesCommand(updater: updater)
+            }
             CommandGroup(after: .newItem) {
                 OpenFileCommand(model: model)
+            }
+            CommandMenu("Library") {
+                Button("Rescan Library") { Task { await model.rescan() } }
+                    .keyboardShortcut("r", modifiers: [.command, .shift])
+                    .disabled(model.client == nil || model.scanning)
             }
         }
 
         Settings {
-            SettingsView().environment(model)
+            SettingsView().environment(model).environment(updater)
         }
     }
 }
@@ -50,5 +61,17 @@ private struct OpenFileCommand: View {
             model.playFile(url)
         }
         .keyboardShortcut("o")
+    }
+}
+
+private struct CheckForUpdatesCommand: View {
+    let updater: Updater
+    @Environment(\.openSettings) private var openSettings
+
+    var body: some View {
+        Button("Check for Updates…") {
+            Task { await updater.check(userInitiated: true) }
+            openSettings()
+        }
     }
 }
