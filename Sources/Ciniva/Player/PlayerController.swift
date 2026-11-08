@@ -46,6 +46,7 @@ final class PlayerController {
     @ObservationIgnored private var countdownTask: Task<Void, Never>?
     @ObservationIgnored private var neighboursTask: Task<Void, Never>?
     @ObservationIgnored private var downloadTask: Task<Void, Never>?
+    @ObservationIgnored private let sleepBlocker = DisplaySleepBlocker()
     @ObservationIgnored private var fellBack = false
     @ObservationIgnored private var stopped = false
     @ObservationIgnored private var loaded = false
@@ -214,6 +215,7 @@ final class PlayerController {
         engineKind = kind
         engineView = e.view
         loaded = false
+        updateSleepBlock()
         isBuffering = true
         audioTracks = []
         subtitleTracks = []
@@ -229,6 +231,7 @@ final class PlayerController {
         engine?.setPaused(!isPaused)
         isPaused.toggle()
         if isPaused { report(force: true) }
+        updateSleepBlock()
     }
 
     func seek(to seconds: Double) {
@@ -301,6 +304,11 @@ final class PlayerController {
         downloadTask?.cancel()
         engine?.shutdown()
         engine = nil
+        updateSleepBlock()
+    }
+
+    private func updateSleepBlock() {
+        sleepBlocker.set(engine != nil && loaded && !isPaused && !ended && !stopped && errorMessage == nil)
     }
 
     // MARK: Up next / credits
@@ -369,6 +377,7 @@ final class PlayerController {
     func engineDidLoad() {
         loaded = true
         errorMessage = nil
+        updateSleepBlock()
     }
 
     func engineTime(_ t: Double) {
@@ -387,6 +396,7 @@ final class PlayerController {
             isPaused = p
             if p { report(force: true) }
         }
+        updateSleepBlock()
     }
 
     func engineBuffering(_ b: Bool) {
@@ -410,6 +420,7 @@ final class PlayerController {
         }
         errorMessage = message
         isBuffering = false
+        updateSleepBlock()
     }
 
     func engineDidQuit() {
@@ -426,6 +437,7 @@ final class PlayerController {
         ended = true
         position = duration
         isBuffering = false
+        updateSleepBlock()
         reportFinished()
         if upNext?.countdown != nil { return }
         if upNext != nil, upNext?.target == nil {
