@@ -59,7 +59,7 @@ jobs:
         run: |
           ditto -c -k --keepParent build/Ciniva.app "$RUNNER_TEMP/notarize.zip"
           xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$NOTARY_APPLE_ID" \
-            --password "$NOTARY_PASSWORD" --team-id "$NOTARY_TEAM_ID" --wait --timeout 30m
+            --password "$NOTARY_PASSWORD" --team-id "$NOTARY_TEAM_ID" --wait --timeout 3h
           xcrun stapler staple build/Ciniva.app
           spctl --assess --type execute --verbose=2 build/Ciniva.app
       - name: Package
