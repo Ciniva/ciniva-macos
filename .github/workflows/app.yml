@@ -58,10 +58,22 @@ jobs:
           NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
         run: |
           ditto -c -k --keepParent build/Ciniva.app "$RUNNER_TEMP/notarize.zip"
-          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$NOTARY_APPLE_ID" \
-            --password "$NOTARY_PASSWORD" --team-id "$NOTARY_TEAM_ID" --wait --timeout 3h
-          xcrun stapler staple build/Ciniva.app
-          spctl --assess --type execute --verbose=2 build/Ciniva.app
+          auth=(--apple-id "$NOTARY_APPLE_ID" --password "$NOTARY_PASSWORD" --team-id "$NOTARY_TEAM_ID")
+          id=$(xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" "${auth[@]}" --output-format json | jq -r .id)
+          echo "Submission $id"
+          xcrun notarytool wait "$id" "${auth[@]}" --timeout 20m || true
+          status=$(xcrun notarytool info "$id" "${auth[@]}" --output-format json | jq -r .status)
+          case "$status" in
+            Accepted)
+              xcrun stapler staple build/Ciniva.app
+              spctl --assess --type execute --verbose=2 build/Ciniva.app ;;
+            "In Progress")
+              # Apple can hold a new team's submissions for a day; the ticket is still issued later and Gatekeeper finds it online.
+              echo "::warning::Notarization $id still in progress; releasing without a stapled ticket." ;;
+            *)
+              xcrun notarytool log "$id" "${auth[@]}" || true
+              echo "::error::Notarization $id: $status"; exit 1 ;;
+          esac
       - name: Package
         run: ditto -c -k --keepParent build/Ciniva.app "Ciniva-$VERSION.zip"
       - uses: actions/upload-artifact@v4
