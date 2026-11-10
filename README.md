@@ -30,8 +30,8 @@ BUNDLE_LIBS=1 ./build.sh         # self-contained app with libmpv and its depend
 
 ## Releases
 
-GitHub Actions tests and builds every push. Pushing a commit to `main` that changes `VERSION` publishes release
-`v<VERSION>` with the zip and its signature. Repository secrets:
+GitHub Actions tests and builds pull requests and manual runs on any branch (the zip is a workflow artifact). Pushing
+tag `v<VERSION>` publishes that release with the zip and its signature. Repository secrets:
 
 - `UPDATE_SIGNING_KEY`: base64 raw Ed25519 private key; its public half is `Updater.publicKey`.
 - `DEVELOPER_ID_P12`, `DEVELOPER_ID_PASSWORD`: base64 PKCS#12 with a "Developer ID Application" identity. Builds are

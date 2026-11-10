@@ -1,8 +1,9 @@
 name: App
 
+# Tags (v<VERSION>) publish a release; pull requests and manual runs on any branch only build.
 on:
   push:
-    branches: [main]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -20,7 +21,9 @@ jobs:
         run: swift test
       - name: Version
         run: |
-          echo "VERSION=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_ENV"
+          v=$(tr -d '[:space:]' < VERSION)
+          if [[ $GITHUB_REF == refs/tags/v* && "v$v" != "$GITHUB_REF_NAME" ]]; then echo "::error::tag $GITHUB_REF_NAME does not match VERSION $v"; exit 1; fi
+          echo "VERSION=$v" >> "$GITHUB_ENV"
           echo "BUILD=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
       - name: Signing identity
         env:
@@ -81,7 +84,7 @@ jobs:
           name: Ciniva-${{ env.VERSION }}
           path: Ciniva-${{ env.VERSION }}.zip
       - name: Release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
