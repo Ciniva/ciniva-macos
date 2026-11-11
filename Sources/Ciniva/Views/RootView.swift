@@ -98,10 +98,12 @@ struct SignInView: View {
 struct BrowserView: View {
     @Environment(AppModel.self) private var model
     @State private var query = ""
+    @State private var columns: NavigationSplitViewVisibility = .automatic
+    @State private var columnsBeforePlayback: NavigationSplitViewVisibility?
 
     var body: some View {
         @Bindable var model = model
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columns) {
             List(selection: $model.selection) {
                 Label("Home", systemImage: "house").tag(SidebarItem.home)
                 Section("Library") {
@@ -166,6 +168,16 @@ struct BrowserView: View {
         }
         .toolbar(model.playback == nil ? .automatic : .hidden, for: .windowToolbar)
         .onChange(of: model.selection) { model.path = [] }
+        .onChange(of: model.playback == nil, initial: true) { _, closed in
+            // The sidebar's titlebar area shows through when full screen reveals the titlebar over the player.
+            if closed {
+                columns = columnsBeforePlayback ?? .automatic
+                columnsBeforePlayback = nil
+            } else {
+                columnsBeforePlayback = columns
+                columns = .detailOnly
+            }
+        }
         .sheet(item: $model.pluginSheet) { sheet in
             PluginSheetView(sheet: sheet)
         }
