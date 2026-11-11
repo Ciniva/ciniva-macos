@@ -34,7 +34,6 @@ final class PlayerController {
     var previous: EpisodeTarget?
     var next: EpisodeTarget?
     var trickplay: TrickplayManifest?
-    var availableSecs: Double?
     var lineup: LiveLineup?
 
     @ObservationIgnored var onSwitch: ((PlaybackRequest) -> Void)?
@@ -46,7 +45,6 @@ final class PlayerController {
     @ObservationIgnored private var progressTask: Task<Void, Never>?
     @ObservationIgnored private var countdownTask: Task<Void, Never>?
     @ObservationIgnored private var neighboursTask: Task<Void, Never>?
-    @ObservationIgnored private var downloadTask: Task<Void, Never>?
     @ObservationIgnored private let sleepBlocker = DisplaySleepBlocker()
     @ObservationIgnored private var fellBack = false
     @ObservationIgnored private var stopped = false
@@ -88,10 +86,6 @@ final class PlayerController {
             startEngine(pref == .mpvWindow ? .mpvWindow : (native && pref != .mpv ? .avfoundation : .mpv), at: 0)
             return
         }
-        if let id = request.downloadId {
-            await startDownload(id)
-            return
-        }
         guard let client, let fileId = request.fileId else { return }
         let file: MediaFile
         do {
@@ -125,41 +119,6 @@ final class PlayerController {
                 isBuffering = false
             } else {
                 begin(at: 0)
-            }
-        }
-    }
-
-    private func startDownload(_ id: String) async {
-        guard let client else { return }
-        let item: DownloadItem
-        do {
-            item = try await client.download(id)
-        } catch CinivaError.unauthorized {
-            onUnauthorized?()
-            return
-        } catch {
-            errorMessage = error.localizedDescription
-            isBuffering = false
-            return
-        }
-        guard !stopped else { return }
-        mediaURL = client.downloadStreamURL(id)
-        sourceBadges = item.probe?.techBadges ?? []
-        duration = item.duration ?? 0
-        availableSecs = item.availableSecs
-        let windowed = Prefs.enginePreference == .mpvWindow || item.probe?.video?.dolbyVisionProfile == 5
-        startEngine(windowed ? .mpvWindow : .mpv, at: request.startAt ?? 0)
-        // The item disappears once qBittorrent finishes; from then on the whole file is seekable.
-        downloadTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(5))
-                guard let self, !self.stopped else { return }
-                do {
-                    self.availableSecs = try await client.download(id).availableSecs
-                } catch CinivaError.http(404, _) {
-                    self.availableSecs = nil
-                    return
-                } catch {}
             }
         }
     }
@@ -251,7 +210,6 @@ final class PlayerController {
     func seek(to seconds: Double) {
         guard engine != nil else { return }
         var upper = max(0, duration - 1)
-        if let a = availableSecs { upper = min(upper, max(0, a - 10)) }
         let target = min(max(0, seconds), upper)
         position = target
         engine?.seek(to: target)
@@ -315,7 +273,6 @@ final class PlayerController {
         progressTask?.cancel()
         countdownTask?.cancel()
         neighboursTask?.cancel()
-        downloadTask?.cancel()
         liveTask?.cancel()
         liveWatchdog?.cancel()
         engine?.shutdown()

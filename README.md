@@ -2,7 +2,7 @@
 
 Native macOS player for a [Ciniva](https://github.com/Ciniva/ciniva) server. It direct-plays every format through mpv
 or AVFoundation (Dolby Vision, HDR10, Atmos passthrough), with resume, Continue watching / Up next, credits detection,
-episode navigation, trickplay previews, plugin pages, Download & watch (play torrents while they download), Live TV
+episode navigation, trickplay previews, plugin pages, Live TV
 from plugins such as IPTV (↑ next / ↓ previous channel, automatic reconnect; needs Ciniva 0.8.0) and a library rescan
 button.
 

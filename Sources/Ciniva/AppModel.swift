@@ -10,7 +10,6 @@ struct PlaybackRequest: Identifiable, Equatable {
     var showId: Int?
     var startAt: Double?
     var fileURL: URL?
-    var downloadId: String?
     var live: LiveLineup?
 
     static func episode(_ t: EpisodeTarget, startAt: Double?) -> PlaybackRequest {

@@ -63,7 +63,8 @@ final class MPVEngine: PlaybackEngine {
             ("demuxer-max-bytes", "1024MiB"),
             ("demuxer-max-back-bytes", "256MiB"),
             ("demuxer-readahead-secs", "60"),
-            ("network-timeout", "30"),
+            // Longer than the server's wait for data that is still downloading (3 min), so the server decides.
+            ("network-timeout", "200"),
             ("audio-channels", "auto"),
             ("tone-mapping", "auto"),
             ("hdr-compute-peak", "auto"),
