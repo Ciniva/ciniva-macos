@@ -8,14 +8,18 @@ struct PlayerScreen: View {
         ZStack {
             Color.black
             if let request = model.playback {
-                PlayerContainer(request: request, client: model.client).id(request.id)
+                if request.live != nil {
+                    LivePlayerContainer(request: request, client: model.client).id(request.id)
+                } else {
+                    PlayerContainer(request: request, client: model.client).id(request.id)
+                }
             }
         }
         .ignoresSafeArea()
     }
 }
 
-private struct EngineHost: NSViewRepresentable {
+struct EngineHost: NSViewRepresentable {
     let view: NSView?
 
     func makeNSView(context: Context) -> NSView {
@@ -26,7 +30,11 @@ private struct EngineHost: NSViewRepresentable {
     }
 
     func updateNSView(_ container: NSView, context: Context) {
-        guard let view, view.superview !== container else { return }
+        guard let view else {
+            container.subviews.forEach { $0.removeFromSuperview() }
+            return
+        }
+        guard view.superview !== container else { return }
         container.subviews.forEach { $0.removeFromSuperview() }
         view.frame = container.bounds
         view.autoresizingMask = [.width, .height]

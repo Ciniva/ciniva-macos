@@ -168,8 +168,9 @@ struct PluginBlockView: View {
             if items.isEmpty {
                 Text(empty ?? "Nothing here.").foregroundStyle(.secondary).padding(.vertical, 24)
             } else {
+                let channels = LiveChannel.channels(in: items)
                 LazyVStack(spacing: 6) {
-                    ForEach(items) { PluginListRow(item: $0, host: host) }
+                    ForEach(items) { PluginListRow(item: $0, host: host, channels: channels) }
                 }
             }
         case .unknown:
@@ -181,6 +182,12 @@ struct PluginBlockView: View {
 @MainActor
 enum PluginRunner {
     static func perform(model: AppModel, host: PluginHost, action: PluginUIAction) async {
+        if let play = action.play, !play.stream.isEmpty {
+            host.dismiss?()
+            let channel = LiveChannel(stream: play.stream, title: play.title ?? action.label)
+            model.playLive(pluginId: host.pluginId, channel: channel, channels: [])
+            return
+        }
         if let nav = action.navigate {
             host.dismiss?()
             model.navigatePlugin(host.pluginId, nav)
@@ -252,12 +259,18 @@ struct PluginListRow: View {
     @Environment(AppModel.self) private var model
     let item: PluginListItem
     let host: PluginHost
+    var channels: [LiveChannel] = []
     @State private var hovering = false
+
+    private var clickable: Bool { item.play != nil || item.link != nil }
 
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
             HStack(alignment: .center, spacing: 14) {
-                if let image = item.image {
+                if item.play != nil {
+                    ChannelLogo(url: model.client?.imageURL(item.image, size: "w185"))
+                        .frame(width: 64, height: 48)
+                } else if let image = item.image {
                     RemoteImage(url: model.client?.imageURL(image, size: "w185"))
                         .frame(width: 46, height: 69)
                         .clipShape(RoundedRectangle(cornerRadius: 5))
@@ -284,7 +297,10 @@ struct PluginListRow: View {
             }
             .contentShape(Rectangle())
             .onTapGesture {
-                if let link = item.link {
+                if let play = item.play, !play.stream.isEmpty {
+                    host.dismiss?()
+                    model.playLive(pluginId: host.pluginId, channel: LiveChannel(item: item, play: play), channels: channels)
+                } else if let link = item.link {
                     host.dismiss?()
                     model.navigatePlugin(host.pluginId, link)
                 }
@@ -298,7 +314,7 @@ struct PluginListRow: View {
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
-        .background(.quaternary.opacity(hovering && item.link != nil ? 0.9 : 0.5), in: RoundedRectangle(cornerRadius: 10))
+        .background(.quaternary.opacity(hovering && clickable ? 0.9 : 0.5), in: RoundedRectangle(cornerRadius: 10))
         .onHover { hovering = $0 }
     }
 }

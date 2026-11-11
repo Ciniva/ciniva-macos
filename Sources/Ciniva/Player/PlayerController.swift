@@ -35,6 +35,7 @@ final class PlayerController {
     var next: EpisodeTarget?
     var trickplay: TrickplayManifest?
     var availableSecs: Double?
+    var lineup: LiveLineup?
 
     @ObservationIgnored var onSwitch: ((PlaybackRequest) -> Void)?
     @ObservationIgnored var onClose: (() -> Void)?
@@ -55,18 +56,31 @@ final class PlayerController {
     @ObservationIgnored private var creditsShown = false
     @ObservationIgnored private var lastReport = Date.distantPast
     @ObservationIgnored private var ended = false
+    @ObservationIgnored private var liveTask: Task<Void, Never>?
+    @ObservationIgnored private var liveWatchdog: Task<Void, Never>?
+    @ObservationIgnored private var liveGeneration = 0
+    @ObservationIgnored private var liveRestarts = 0
+    @ObservationIgnored private var liveProgressAt = Date()
+    @ObservationIgnored private var liveLoadedAt = Date()
+    @ObservationIgnored private var liveRestartPending = false
 
     init(request: PlaybackRequest, client: CinivaClient?) {
         self.request = request
         self.client = client
         navigator = client.map { EpisodeNavigator(client: $0) }
+        lineup = request.live
     }
 
-    var title: String { request.title }
+    var isLive: Bool { lineup != nil }
+    var title: String { lineup?.current.title ?? request.title }
     var subtitle: String? { request.subtitle }
     var isEpisode: Bool { request.showId != nil }
 
     func start() async {
+        if isLive {
+            startLive()
+            return
+        }
         if let fileURL = request.fileURL {
             mediaURL = fileURL
             let native = ["mp4", "mov", "m4v"].contains(fileURL.pathExtension.lowercased())
@@ -302,6 +316,8 @@ final class PlayerController {
         countdownTask?.cancel()
         neighboursTask?.cancel()
         downloadTask?.cancel()
+        liveTask?.cancel()
+        liveWatchdog?.cancel()
         engine?.shutdown()
         engine = nil
         updateSleepBlock()
@@ -382,12 +398,17 @@ final class PlayerController {
 
     func engineTime(_ t: Double) {
         guard t.isFinite else { return }
+        if isLive {
+            if t > position { liveProgressAt = Date() }
+            position = t
+            return
+        }
         position = t
         checkCredits(t)
     }
 
     func engineDuration(_ d: Double) {
-        guard d.isFinite, d > 0 else { return }
+        guard !isLive, d.isFinite, d > 0 else { return }
         if duration <= 0 || abs(duration - d) > 2 { duration = d }
     }
 
@@ -413,6 +434,10 @@ final class PlayerController {
     }
 
     func engineDidFail(_ message: String) {
+        if isLive {
+            restartLive(reason: message)
+            return
+        }
         if engineKind == .avfoundation, !fellBack, !loaded {
             fellBack = true
             startEngine(.mpv, at: max(position, startOffset))
@@ -428,11 +453,15 @@ final class PlayerController {
     }
 
     func engineNeedsDolbyVisionReshaping() {
-        guard engineKind == .mpv else { return }
+        guard engineKind == .mpv, !isLive else { return }
         startEngine(.mpvWindow, at: max(position, startOffset))
     }
 
     func engineDidEnd() {
+        if isLive {
+            restartLive(reason: "The channel stopped sending video.")
+            return
+        }
         guard !stopped, !ended else { return }
         ended = true
         position = duration
@@ -472,5 +501,123 @@ final class PlayerController {
         guard let client, let fileId = request.fileId, duration > 0 else { return }
         let dur = Int(duration * 1000)
         Task { try? await client.saveProgress(fileId: fileId, positionMs: dur, durationMs: dur) }
+    }
+
+    // MARK: Live
+
+    func zap(_ step: Int) {
+        guard var l = lineup, l.canZap, !stopped else { return }
+        l.zap(step)
+        lineup = l
+        liveRestarts = 0
+        engine?.shutdown()
+        engine = nil
+        engineView = nil
+        loaded = false
+        updateSleepBlock()
+        startLive()
+    }
+
+    func retryLive() {
+        liveRestarts = 0
+        startLive()
+    }
+
+    private func startLive() {
+        guard let client, let l = lineup, !stopped else { return }
+        liveGeneration += 1
+        let generation = liveGeneration
+        let channel = l.current
+        liveRestartPending = false
+        errorMessage = nil
+        isBuffering = true
+        position = 0
+        liveTask?.cancel()
+        liveTask = Task { [weak self] in
+            do {
+                let started = try await client.startLive(plugin: l.pluginId, stream: channel.stream)
+                self?.liveStarted(started, generation: generation)
+            } catch CinivaError.unauthorized {
+                self?.onUnauthorized?()
+            } catch {
+                self?.liveFailed(error, generation: generation)
+            }
+        }
+    }
+
+    private func liveStarted(_ started: LiveStart, generation: Int) {
+        guard generation == liveGeneration, !stopped, let client else { return }
+        lineup?.update(title: started.title, image: started.image)
+        mediaURL = client.livePlaylistURL(started.playlist)
+        liveProgressAt = Date()
+        liveLoadedAt = Date()
+        startEngine(.mpv, at: 0)
+        startLiveWatchdog()
+    }
+
+    private func liveFailed(_ error: Error, generation: Int) {
+        guard generation == liveGeneration, !stopped else { return }
+        if (error as? URLError)?.code == .cancelled || error is CancellationError { return }
+        if liveRestarts > 0 {
+            restartLive(reason: error.localizedDescription)
+            return
+        }
+        showLiveError(error.localizedDescription)
+    }
+
+    private func restartLive(reason: String) {
+        guard isLive, !stopped, !liveRestartPending else { return }
+        liveRestarts += 1
+        guard let delay = LivePolicy.restartDelay(attempt: liveRestarts) else {
+            showLiveError(reason)
+            return
+        }
+        liveGeneration += 1
+        let generation = liveGeneration
+        liveRestartPending = true
+        isBuffering = true
+        liveWatchdog?.cancel()
+        liveTask?.cancel()
+        liveTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, let self, generation == self.liveGeneration else { return }
+            self.startLive()
+        }
+    }
+
+    private func showLiveError(_ message: String) {
+        liveWatchdog?.cancel()
+        engine?.shutdown()
+        engine = nil
+        engineView = nil
+        loaded = false
+        errorMessage = message
+        isBuffering = false
+        updateSleepBlock()
+    }
+
+    private func startLiveWatchdog() {
+        liveWatchdog?.cancel()
+        liveWatchdog = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled, let self else { return }
+                self.checkLiveStall()
+            }
+        }
+    }
+
+    private func checkLiveStall() {
+        guard !isPaused, errorMessage == nil, !liveRestartPending else {
+            liveProgressAt = Date()
+            return
+        }
+        let now = Date()
+        let stalled = now.timeIntervalSince(liveProgressAt)
+        if stalled > 20 {
+            restartLive(reason: "The channel stopped sending video.")
+        } else if loaded, stalled < 5, now.timeIntervalSince(liveLoadedAt) > 20 {
+            liveRestarts = 0
+        }
     }
 }

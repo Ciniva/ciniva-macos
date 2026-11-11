@@ -92,6 +92,7 @@ public struct PluginUIAction: Decodable, Hashable, Sendable {
     public let confirm: String?
     public let call: PluginCall?
     public let navigate: PluginNav?
+    public let play: PluginPlay?
 }
 
 public struct PluginFieldOption: Decodable, Hashable, Sendable {
@@ -171,8 +172,9 @@ public struct PluginListItem: Decodable, Hashable, Sendable, Identifiable {
     public let badges: [PluginBadge]?
     public let actions: [PluginUIAction]?
     public let link: PluginNav?
+    public let play: PluginPlay?
 
-    enum CodingKeys: String, CodingKey { case id, title, subtitle, image, progress, badges, actions, link }
+    enum CodingKeys: String, CodingKey { case id, title, subtitle, image, progress, badges, actions, link, play }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -184,6 +186,7 @@ public struct PluginListItem: Decodable, Hashable, Sendable, Identifiable {
         badges = try c.decodeIfPresent([PluginBadge].self, forKey: .badges)
         actions = try c.decodeIfPresent([PluginUIAction].self, forKey: .actions)
         link = try c.decodeIfPresent(PluginNav.self, forKey: .link)
+        play = try c.decodeIfPresent(PluginPlay.self, forKey: .play)
     }
 }
 

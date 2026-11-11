@@ -87,9 +87,10 @@ public struct CinivaClient: Sendable {
 
     // MARK: Transport
 
-    public func send(_ method: String, _ path: String, query: [URLQueryItem] = [], body: JSONValue? = nil) async throws -> Data {
+    public func send(_ method: String, _ path: String, query: [URLQueryItem] = [], body: JSONValue? = nil, timeout: TimeInterval? = nil) async throws -> Data {
         var req = URLRequest(url: apiURL(path, query: query))
         req.httpMethod = method
+        if let timeout { req.timeoutInterval = timeout }
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         if let body {

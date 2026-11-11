@@ -11,6 +11,7 @@ struct PlaybackRequest: Identifiable, Equatable {
     var startAt: Double?
     var fileURL: URL?
     var downloadId: String?
+    var live: LiveLineup?
 
     static func episode(_ t: EpisodeTarget, startAt: Double?) -> PlaybackRequest {
         PlaybackRequest(fileId: t.fileId, title: t.showTitle, subtitle: t.label, showId: t.showId, startAt: startAt)
@@ -188,6 +189,12 @@ final class AppModel {
     func closePlayer() {
         playback = nil
         libraryVersion += 1
+    }
+
+    func playLive(pluginId: String, channel: LiveChannel, channels: [LiveChannel]) {
+        let lineup = LiveLineup(pluginId: pluginId, current: channel, channels: channels)
+        pluginSheet = nil
+        playback = PlaybackRequest(title: channel.title, live: lineup)
     }
 
     func playFile(_ url: URL) {
